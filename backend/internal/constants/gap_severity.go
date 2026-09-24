@@ -14,15 +14,19 @@ const (
 	GapReviewed      GapState = "reviewed"
 	GapAccepted      GapState = "accepted"
 	GapFalsePositive GapState = "false_positive"
+	GapRetesting     GapState = "retesting"
 	GapResurveyed    GapState = "resurveyed"
 	GapClosed        GapState = "closed"
 )
 
+// gapTransitions 仅描述复核人手工迁移；accepted -> retesting 与
+// retesting -> accepted/resurveyed 由补测执行单在事务内驱动，不允许手工跳转。
 var gapTransitions = map[GapState]map[GapState]struct{}{
 	GapDetected:      {GapReviewed: {}},
 	GapReviewed:      {GapAccepted: {}, GapFalsePositive: {}},
-	GapAccepted:      {GapResurveyed: {}},
+	GapAccepted:      {},
 	GapFalsePositive: {GapClosed: {}},
+	GapRetesting:     {},
 	GapResurveyed:    {GapClosed: {}},
 	GapClosed:        {},
 }

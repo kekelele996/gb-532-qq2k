@@ -116,6 +116,8 @@ func mapDatabaseError(err error, entity string) error {
 		return api.NotFound(entity, err)
 	case errors.Is(err, repository.ErrVersionConflict):
 		return api.Conflict("VERSION_CONFLICT", entity+"版本已变化，请刷新后重试", err)
+	case errors.Is(err, repository.ErrOpenTaskExists):
+		return api.Conflict("RESURVEY_TASK_OPEN_EXISTS", "该缺口已有未结束的补测任务，完成或取消后才能再建单", err)
 	case errors.Is(err, gorm.ErrDuplicatedKey):
 		return api.Conflict("DUPLICATE_RESOURCE", entity+"已存在", err)
 	default:

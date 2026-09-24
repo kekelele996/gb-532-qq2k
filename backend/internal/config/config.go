@@ -70,8 +70,11 @@ func OpenDatabase(config Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("open %s database: %w", config.DBDriver, err)
 	}
 	if config.AutoMigrate {
-		if err := db.AutoMigrate(&model.User{}, &model.SurveyArea{}, &model.TransectPlan{}, &model.SonarRun{}, &model.CoverageGap{}, &model.AuditEvent{}); err != nil {
+		if err := db.AutoMigrate(&model.User{}, &model.SurveyArea{}, &model.TransectPlan{}, &model.SonarRun{}, &model.CoverageGap{}, &model.ResurveyTask{}, &model.AuditEvent{}); err != nil {
 			return nil, fmt.Errorf("migrate database: %w", err)
+		}
+		if err := createOpenTaskIndex(db); err != nil {
+			return nil, err
 		}
 	}
 	if config.SeedData {
@@ -80,6 +83,18 @@ func OpenDatabase(config Config) (*gorm.DB, error) {
 		}
 	}
 	return db, nil
+}
+
+func createOpenTaskIndex(db *gorm.DB) error {
+	// 同一缺口至多一张未结束（pending/running/awaiting_review）补测单。
+	// Postgres 与 SQLite 均支持该部分索引语法，重复点击/并发建单由数据库兜底。
+	const ddl = `CREATE UNIQUE INDEX IF NOT EXISTS idx_resurvey_task_open
+		ON resurvey_tasks (coverage_gap_id)
+		WHERE task_state IN ('pending', 'running', 'awaiting_review')`
+	if err := db.Exec(ddl).Error; err != nil {
+		return fmt.Errorf("create open resurvey task index: %w", err)
+	}
+	return nil
 }
 
 func seed(db *gorm.DB) error {

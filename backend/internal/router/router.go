@@ -20,6 +20,7 @@ type Handlers struct {
 	Plan     *handler.TransectPlanHandler
 	Run      *handler.SonarRunHandler
 	Coverage *handler.CoverageGapHandler
+	Task     *handler.ResurveyTaskHandler
 	Audit    *handler.AuditHandler
 }
 
@@ -63,6 +64,11 @@ func New(log *slog.Logger, auth *service.AuthService, handlers Handlers) *gin.En
 	protected.GET("/coverage-gaps/:id", handlers.Coverage.Get)
 	protected.POST("/coverage-gaps/detect", coverageLimit.Middleware("coverage-detect"), middleware.RBAC(constants.RoleAdmin, constants.RoleDataProcessor), handlers.Coverage.Detect)
 	protected.POST("/coverage-gaps/:id/transition", middleware.RBAC(constants.RoleReviewer), handlers.Coverage.Transition)
+
+	protected.GET("/resurvey-tasks", handlers.Task.List)
+	protected.GET("/resurvey-tasks/:id", handlers.Task.Get)
+	protected.POST("/resurvey-tasks", middleware.RBAC(constants.RoleAdmin, constants.RoleReviewer), handlers.Task.Create)
+	protected.POST("/resurvey-tasks/:id/transition", middleware.RBAC(constants.RoleAdmin, constants.RoleReviewer, constants.RoleDataProcessor), handlers.Task.Transition)
 
 	protected.GET("/audits", middleware.RBAC(constants.RoleAdmin, constants.RoleReviewer, constants.RoleAuditor), handlers.Audit.List)
 	return engine

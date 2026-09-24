@@ -9,6 +9,7 @@ import (
 )
 
 var ErrVersionConflict = errors.New("resource version or state conflict")
+var ErrOpenTaskExists = errors.New("an open resurvey task already exists for the gap")
 
 type SupportRepository struct{ db *gorm.DB }
 
