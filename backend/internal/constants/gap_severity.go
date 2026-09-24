@@ -13,6 +13,7 @@ const (
 	GapDetected      GapState = "detected"
 	GapReviewed      GapState = "reviewed"
 	GapAccepted      GapState = "accepted"
+	GapResurveying   GapState = "resurveying"
 	GapFalsePositive GapState = "false_positive"
 	GapResurveyed    GapState = "resurveyed"
 	GapClosed        GapState = "closed"
@@ -21,10 +22,26 @@ const (
 var gapTransitions = map[GapState]map[GapState]struct{}{
 	GapDetected:      {GapReviewed: {}},
 	GapReviewed:      {GapAccepted: {}, GapFalsePositive: {}},
-	GapAccepted:      {GapResurveyed: {}},
+	GapAccepted:      {GapResurveying: {}},
+	GapResurveying:   {GapAccepted: {}, GapResurveyed: {}},
 	GapFalsePositive: {GapClosed: {}},
 	GapResurveyed:    {GapClosed: {}},
 	GapClosed:        {},
+}
+
+// taskDrivenGapTransitions 只能由补测执行单生命周期触发，人工复核端点必须拒绝。
+var taskDrivenGapTransitions = map[GapState]map[GapState]struct{}{
+	GapAccepted:    {GapResurveying: {}},
+	GapResurveying: {GapAccepted: {}, GapResurveyed: {}},
+}
+
+func IsTaskDrivenGapTransition(from, to GapState) bool {
+	allowed, ok := taskDrivenGapTransitions[from]
+	if !ok {
+		return false
+	}
+	_, ok = allowed[to]
+	return ok
 }
 
 func (s GapState) Valid() bool {

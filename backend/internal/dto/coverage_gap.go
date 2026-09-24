@@ -8,7 +8,7 @@ type DetectCoverageRequest struct {
 }
 
 type GapTransitionRequest struct {
-	TargetState     string `json:"target_state" binding:"required,oneof=reviewed accepted false_positive resurveyed closed"`
+	TargetState     string `json:"target_state" binding:"required,oneof=reviewed accepted resurveying false_positive resurveyed closed"`
 	ExpectedVersion uint   `json:"expected_version" binding:"required,gt=0"`
 	ReviewNote      string `json:"review_note" binding:"required,min=8,max=600"`
 }

@@ -126,6 +126,9 @@ func (s *CoverageGapService) Transition(id uint, request dto.GapTransitionReques
 	if !from.CanTransition(target) {
 		return model.CoverageGap{}, api.Conflict("GAP_TRANSITION_INVALID", fmt.Sprintf("不能从 %s 迁移到 %s", from, target), nil)
 	}
+	if constants.IsTaskDrivenGapTransition(from, target) {
+		return model.CoverageGap{}, api.Conflict("GAP_TRANSITION_TASK_DRIVEN", "该状态迁移由补测执行单推进，请通过执行单操作", nil)
+	}
 	explanation := before.Explanation + " 复核记录：" + request.ReviewNote
 	updated, err := s.repository.Transition(id, request.ExpectedVersion, before.GapState, request.TargetState, explanation)
 	if err != nil {

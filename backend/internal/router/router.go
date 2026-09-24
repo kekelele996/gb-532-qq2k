@@ -15,12 +15,13 @@ import (
 )
 
 type Handlers struct {
-	Auth     *handler.AuthHandler
-	Area     *handler.SurveyAreaHandler
-	Plan     *handler.TransectPlanHandler
-	Run      *handler.SonarRunHandler
-	Coverage *handler.CoverageGapHandler
-	Audit    *handler.AuditHandler
+	Auth         *handler.AuthHandler
+	Area         *handler.SurveyAreaHandler
+	Plan         *handler.TransectPlanHandler
+	Run          *handler.SonarRunHandler
+	Coverage     *handler.CoverageGapHandler
+	ResurveyTask *handler.ResurveyTaskHandler
+	Audit        *handler.AuditHandler
 }
 
 func New(log *slog.Logger, auth *service.AuthService, handlers Handlers) *gin.Engine {
@@ -63,6 +64,10 @@ func New(log *slog.Logger, auth *service.AuthService, handlers Handlers) *gin.En
 	protected.GET("/coverage-gaps/:id", handlers.Coverage.Get)
 	protected.POST("/coverage-gaps/detect", coverageLimit.Middleware("coverage-detect"), middleware.RBAC(constants.RoleAdmin, constants.RoleDataProcessor), handlers.Coverage.Detect)
 	protected.POST("/coverage-gaps/:id/transition", middleware.RBAC(constants.RoleReviewer), handlers.Coverage.Transition)
+
+	protected.GET("/resurvey-tasks", handlers.ResurveyTask.List)
+	protected.POST("/resurvey-tasks", middleware.RBAC(constants.RoleReviewer), handlers.ResurveyTask.Create)
+	protected.POST("/resurvey-tasks/:id/transition", middleware.RBAC(constants.RoleReviewer), handlers.ResurveyTask.Transition)
 
 	protected.GET("/audits", middleware.RBAC(constants.RoleAdmin, constants.RoleReviewer, constants.RoleAuditor), handlers.Audit.List)
 	return engine

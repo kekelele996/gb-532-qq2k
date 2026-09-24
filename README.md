@@ -12,6 +12,7 @@ docker compose up -d --build
 - 测线：从测区生成平行测线，锁定执行版本，复制形成后续草稿。
 - 航迹：导入 GeoJSON，检查采样点、长度、航速与导航质量，按状态机处理。
 - 覆盖：以固定网格估算覆盖、重复覆盖和漏测，冻结输入哈希并生成补测线建议。
+- 补测执行单：已接受补测的缺口可建立执行单，记录执行人与计划日期，按待执行、执行中、待复验推进，复核人确认后缺口进入已补测。
 - 审计：记录四类实体写操作的前后快照、操作者、角色、request ID 和算法元数据。
 
 ## 角色与账号
@@ -23,10 +24,10 @@ docker compose up -d --build
 | `admin` | `admin` | 测区、规划、航迹和覆盖计算管理 |
 | `planner` | `survey_planner` | 测区与测线规划 |
 | `processor` | `data_processor` | 航迹导入、处理和覆盖计算 |
-| `reviewer` | `reviewer` | 覆盖缺口人工复核与审计读取 |
+| `reviewer` | `reviewer` | 覆盖缺口人工复核、补测执行单管理与审计读取 |
 | `auditor` | `auditor` | 全局只读与审计读取 |
 
-审计员在数据库角色、JWT claims、Gin RBAC、React 路由和按钮层均为只读。只有 `reviewer` 可以推进缺口复核状态。
+审计员在数据库角色、JWT claims、Gin RBAC、React 路由和按钮层均为只读。只有 `reviewer` 可以推进缺口复核状态并创建、推进或取消补测执行单。
 
 ## 页面
 
@@ -35,7 +36,7 @@ docker compose up -d --build
 | `/areas` | SurveyArea、TransectPlan | 创建投影测区、查看覆盖摘要和边界 |
 | `/plans` | TransectPlan、SurveyArea | 生成平行测线、锁定或复制版本 |
 | `/runs` | SonarRun、TransectPlan | 导入航迹、读取质量证据、推进处理状态 |
-| `/coverage` | CoverageGap、SonarRun、SurveyArea | 计算覆盖、查看缺口与补测线、人工复核 |
+| `/coverage` | CoverageGap、SonarRun、SurveyArea、ResurveyTask | 计算覆盖、查看缺口与补测线、人工复核、建立并推进补测执行单 |
 | `/audit` | 四实体审计投影 | 按 request ID、实体和操作者筛选 |
 
 所有页面通过 `/api/v1` 读取真实数据。二维测绘画布使用本地 Canvas，不依赖在线地图或第三方瓦片服务。
@@ -91,6 +92,9 @@ database/init.sql        PostGIS 扩展初始化
 | GET | `/coverage-gaps`、`/coverage-gaps/:id` | 缺口快照列表与详情 |
 | POST | `/coverage-gaps/detect` | 覆盖计算，要求 `Idempotency-Key` |
 | POST | `/coverage-gaps/:id/transition` | reviewer 人工复核 |
+| GET | `/resurvey-tasks` | 补测执行单列表，按缺口或状态筛选 |
+| POST | `/resurvey-tasks` | reviewer 为已接受补测的缺口建单 |
+| POST | `/resurvey-tasks/:id/transition` | reviewer 推进、确认完成或取消执行单 |
 | GET | `/audits` | 审计筛选 |
 
 错误响应统一包含业务 `code`、`message`、可选 `details` 和 `request_id`。无效 GeoJSON/坐标系返回 422，非法状态或版本冲突返回 409，认证与权限分别返回 401/403。
@@ -106,6 +110,18 @@ database/init.sql        PostGIS 扩展初始化
 
 - 后端：`internal/constants/gap_severity.go`；`model/coverage_gap.go`；`dto/coverage_gap.go`；`service/coverage_gap.go`；`handler/coverage_gap.go`；`constants/state_test.go`。
 - 前端：`types/enums/gap-severity.ts`；`types/coverage-gap.ts`；`stores/coverage-gap-store.ts`；`pages/CoveragePage.tsx`；`utils/state.test.ts`。
+
+`GapState = detected | reviewed | accepted | resurveying | false_positive | resurveyed | closed`
+
+- `accepted → resurveying → resurveyed` 由补测执行单驱动：建单使缺口进入补测中，执行单确认完成后进入已补测，取消后回到接受补测；人工复核端点拒绝这些迁移并返回 409。
+- 后端：`internal/constants/gap_severity.go`；`service/coverage_gap.go`（任务驱动守卫）；`service/resurvey_task.go`；`constants/state_test.go`。
+- 前端：`types/enums/gap-severity.ts`；`pages/CoveragePage.tsx`；`utils/state.test.ts`。
+
+`ResurveyTaskState = pending | in_progress | pending_verification | completed | cancelled`
+
+- 后端：`internal/constants/resurvey_task_state.go`；`model/resurvey_task.go`；`dto/resurvey_task.go`；`repository/resurvey_task.go`；`service/resurvey_task.go`；`handler/resurvey_task.go`；`router/router.go`；`constants/state_test.go`。
+- 前端：`types/enums/resurvey-task-state.ts`；`types/resurvey-task.ts`；`api/resurvey-task.ts`；`stores/resurvey-task-store.ts`；`pages/CoveragePage.tsx`；`utils/state.test.ts`。
+- 同一缺口最多一张未结束执行单，由 `active_gap_key` 唯一索引在数据库层保证；任务结束时释放。
 
 ## 坐标与算法边界
 
@@ -182,6 +198,9 @@ docker compose down -v --remove-orphans
 - `VERSION_CONFLICT`：数据已被其他人员更新，刷新列表后按新版本重试。
 - `RUN_TRANSITION_INVALID`：必须依次完成质量检查、处理和已处理状态。
 - `RUN_NOT_PROCESSED`：覆盖计算只能选择已处理且属于同一测区的运行。
+- `GAP_NOT_ACCEPTED`：只有接受补测状态的缺口可以建立补测执行单，刷新列表确认缺口状态。
+- `RESURVEY_TASK_ACTIVE_EXISTS`：同一缺口已有未结束的补测执行单，请先完成或取消。
+- `GAP_TRANSITION_TASK_DRIVEN`：补测中与已补测之间的缺口迁移只能由补测执行单推进。
 - npm 默认镜像无法下载或审计：显式使用 `--registry=https://registry.npmjs.org --replace-registry-host=always`。
 
 ## License

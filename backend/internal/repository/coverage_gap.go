@@ -14,6 +14,12 @@ func NewCoverageGapRepository(db *gorm.DB) *CoverageGapRepository {
 	return &CoverageGapRepository{db: db}
 }
 
+func (r *CoverageGapRepository) DB() *gorm.DB { return r.db }
+
+func (r *CoverageGapRepository) WithTx(tx *gorm.DB) *CoverageGapRepository {
+	return &CoverageGapRepository{db: tx}
+}
+
 func (r *CoverageGapRepository) List(query dto.CoverageGapQuery) ([]model.CoverageGap, int64, error) {
 	db := r.db.Model(&model.CoverageGap{})
 	if query.SurveyAreaID > 0 {

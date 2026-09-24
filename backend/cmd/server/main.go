@@ -35,6 +35,7 @@ func main() {
 	planRepository := repository.NewTransectPlanRepository(db)
 	runRepository := repository.NewSonarRunRepository(db)
 	coverageRepository := repository.NewCoverageGapRepository(db)
+	resurveyTaskRepository := repository.NewResurveyTaskRepository(db)
 
 	auditService := service.NewAuditService(supportRepository)
 	authService := service.NewAuthService(supportRepository, configuration.JWTSecret)
@@ -42,11 +43,13 @@ func main() {
 	planService := service.NewTransectPlanService(planRepository, areaRepository, auditService)
 	runService := service.NewSonarRunService(runRepository, planRepository, auditService)
 	coverageService := service.NewCoverageGapService(coverageRepository, areaRepository, runRepository, auditService)
+	resurveyTaskService := service.NewResurveyTaskService(resurveyTaskRepository, coverageRepository, auditService)
 
 	handlers := router.Handlers{
 		Auth: handler.NewAuthHandler(authService, auditService), Area: handler.NewSurveyAreaHandler(areaService),
 		Plan: handler.NewTransectPlanHandler(planService), Run: handler.NewSonarRunHandler(runService),
-		Coverage: handler.NewCoverageGapHandler(coverageService), Audit: handler.NewAuditHandler(auditService),
+		Coverage: handler.NewCoverageGapHandler(coverageService), ResurveyTask: handler.NewResurveyTaskHandler(resurveyTaskService),
+		Audit: handler.NewAuditHandler(auditService),
 	}
 	engine := router.New(log, authService, handlers)
 	server := &http.Server{Addr: ":" + configuration.Port, Handler: engine, ReadHeaderTimeout: 8 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second}
